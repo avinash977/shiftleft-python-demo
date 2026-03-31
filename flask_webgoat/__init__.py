@@ -18,23 +18,34 @@ def query_db(query, args=(), one=False, commit=False):
 
 
 def create_app():
+    import os
+    import sqlite3
+    from pathlib import Path
+    from werkzeug.security import generate_password_hash
+
     app = Flask(__name__)
-    app.secret_key = "aeZ1iwoh2ree2mo0Eereireong4baitixaixu5Ee"
+    # PRECOGS_FIX: Do not hard-code secrets; read from environment and fall back to a securely generated key
+    secret = os.environ.get("FLASK_SECRET_KEY")
+    if secret:
+        app.secret_key = secret
+    else:
+        # Generate a strong ephemeral key to avoid embedding secrets in source. For production, require FLASK_SECRET_KEY.
+        app.secret_key = os.urandom(32)
 
     db_path = Path(DB_FILENAME)
     if db_path.exists():
         db_path.unlink()
 
-    conn = sqlite3.connect(DB_FILENAME)
-    create_table_query = """CREATE TABLE IF NOT EXISTS user
-    (id INTEGER PRIMARY KEY, username TEXT, password TEXT, access_level INTEGER)"""
-    conn.execute(create_table_query)
+    with sqlite3.connect(DB_FILENAME) as conn:
+        create_table_query = """CREATE TABLE IF NOT EXISTS user
+        (id INTEGER PRIMARY KEY, username TEXT, password TEXT, access_level INTEGER)"""
+        conn.execute(create_table_query)
 
-    insert_admin_query = """INSERT INTO user (id, username, password, access_level)
-    VALUES (1, 'admin', 'maximumentropy', 0)"""
-    conn.execute(insert_admin_query)
-    conn.commit()
-    conn.close()
+        # PRECOGS_FIX: Store admin password as a secure hash instead of plaintext
+        hashed = generate_password_hash("maximumentropy")
+        insert_admin_query = "INSERT INTO user (id, username, password, access_level) VALUES (1, ?, ?, ?)"
+        conn.execute(insert_admin_query, ("admin", hashed, 0))
+        conn.commit()
 
     with app.app_context():
         from . import actions
