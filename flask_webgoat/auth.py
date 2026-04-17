@@ -1,10 +1,6 @@
 from flask import Blueprint, request, jsonify, session, redirect
 from . import query_db
 
-bp = Blueprint("auth", __name__)
-
-
-@bp.route("/login", methods=["POST"])
 def login():
     username = request.form.get("username")
     password = request.form.get("password")
@@ -14,12 +10,13 @@ def login():
             400,
         )
 
-    # vulnerability: SQL Injection
-    query = (
-        "SELECT id, username, access_level FROM user WHERE username = '%s' AND password = '%s'"
-        % (username, password)
-    )
-    result = query_db(query, [], True)
+    # Use parameterized query to avoid SQL injection
+    query = "SELECT id, username, access_level FROM user WHERE username = ? AND password = ?"
+    try:
+        result = query_db(query, (username, password), True)  # PRECOGS_FIX: use parameterized query instead of string interpolation to prevent SQL injection
+    except Exception:
+        return jsonify({"error": "internal server error"}), 500
+
     if result is None:
         return jsonify({"bad_login": True}), 400
     session["user_info"] = (result[0], result[1], result[2])
